@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "default",
+    "disableBypassPermissionsMode": "disable",
+    "allow": [
+      "Bash(git status)", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)",
+      "Bash(git branch)", "Bash(git branch --list:*)", "Bash(git branch --show-current)",
+      "Bash(npm run lint:*)", "Bash(npm run typecheck:*)", "Bash(npm test:*)", "Bash(npm run build:*)",
+      "Bash(ls:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)", "Bash(git commit:*)", "Bash(git rebase:*)", "Bash(git restore:*)", "Bash(git checkout -- *)",
+      "Bash(git branch -d:*)", "Bash(git branch -D:*)", "Bash(gh pr merge:*)",
+      "Bash(npm install:*)", "Bash(npm i:*)", "Bash(npx:*)", "Bash(pnpm add:*)", "Bash(yarn add:*)",
+      "Bash(pip install:*)", "Bash(composer require:*)", "Bash(go get:*)",
+      "Bash(curl:*)", "Bash(docker:*)",
+      "Edit(./.claude/**)", "Edit(./.mcp.json)", "Edit(./CLAUDE.md)", "Edit(./.github/**)",
+      "Edit(./.pre-commit-config.yaml)", "Edit(**/.gitleaksignore)", "Edit(**/.gitleaks.toml)",
+      "Edit(**/osv-scanner.toml)", "Edit(**/.semgrepignore)", "Edit(**/zizmor.yml)", "Edit(**/.zizmor.yml)",
+      "Edit(**/.trivyignore)", "Edit(**/.trivyignore.yaml)", "Edit(**/trivy.yaml)", "Edit(**/trivy-secret.yaml)",
+      "Edit(./SECURITY.md)"
+    ],
+    "deny": [
+      "Read(**/.env)", "Read(**/.env.local)", "Read(**/.env.*.local)", "Read(**/.envrc)",
+      "Read(**/.env.production)", "Read(**/.env.staging)", "Read(**/.env.development)", "Read(**/.env.test)",
+      "Read(./secrets/**)", "Read(**/*.pem)", "Read(**/*.key)", "Read(**/*.tfstate)", "Read(**/*.tfstate.*)",
+      "Read(**/*.p12)", "Read(**/*.pfx)", "Read(**/id_rsa*)", "Read(**/id_ed25519*)", "Read(**/id_ecdsa*)",
+      "Read(~/.ssh/**)", "Read(~/.aws/**)", "Read(~/.config/gh/**)", "Read(~/.kube/**)", "Read(~/.docker/config.json)",
+      "Read(~/.npmrc)", "Read(~/.netrc)", "Read(~/.pypirc)", "Read(~/.gnupg/**)", "Read(~/.password-store/**)",
+      "Read(~/.git-credentials)", "Read(~/.config/gcloud/**)", "Read(~/.azure/**)", "Read(~/.terraform.d/**)",
+      "Read(~/.vault-token)", "Read(~/.cargo/credentials*)", "Read(~/.composer/auth.json)",
+      "Read(~/.config/composer/auth.json)", "Read(~/.m2/settings.xml)", "Read(~/.claude.json)",
+      "Edit(**/.env)", "Edit(**/.env.local)", "Edit(**/.env.*.local)", "Edit(**/.envrc)",
+      "Edit(**/.env.production)", "Edit(**/.env.staging)", "Edit(**/.env.development)", "Edit(**/.env.test)",
+      "Edit(./.github/workflows/**)",
+      "Bash(rm -rf:*)", "Bash(rm -fr:*)", "Bash(sudo:*)", "Bash(wget:*)",
+      "Bash(git push --force:*)", "Bash(git push -f:*)", "Bash(git reset --hard:*)", "Bash(git clean -f:*)",
+      "Bash(chmod 777:*)", "Bash(npm publish:*)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": false,
+    "filesystem": {
+      "denyRead": [
+        "~/.docker", "~/.bash_history", "~/.zsh_history", "~/.local/share/keyrings", "~/.mozilla",
+        "~/.config/google-chrome", "~/Library/Keychains", "~/Library/Application Support/Google/Chrome",
+        "~/Library/Application Support/Firefox", "**/.env.*"
+      ],
+      "allowRead": ["**/.env.example", "**/.env.sample", "**/.env.template", "**/.env.dist"],
+      "denyWrite": [
+        "./CLAUDE.md", "./.mcp.json", "./.claude", "./.github", "./.git/hooks", "./.git/config",
+        "./.pre-commit-config.yaml", "./SECURITY.md", "./.gitleaksignore", "./osv-scanner.toml",
+        "./.semgrepignore", "./.trivyignore"
+      ]
+    },
+    "credentials": {
+      "envVars": [
+        { "name": "ANTHROPIC_API_KEY", "mode": "deny" }, { "name": "ANTHROPIC_AUTH_TOKEN", "mode": "deny" },
+        { "name": "CLAUDE_CODE_OAUTH_TOKEN", "mode": "deny" }, { "name": "GITHUB_TOKEN", "mode": "deny" },
+        { "name": "GH_TOKEN", "mode": "deny" }, { "name": "GITHUB_MCP_TOKEN", "mode": "deny" },
+        { "name": "GITLAB_TOKEN", "mode": "deny" }, { "name": "NPM_TOKEN", "mode": "deny" },
+        { "name": "NODE_AUTH_TOKEN", "mode": "deny" }, { "name": "TWINE_PASSWORD", "mode": "deny" },
+        { "name": "CARGO_REGISTRY_TOKEN", "mode": "deny" }, { "name": "COMPOSER_AUTH", "mode": "deny" },
+        { "name": "AWS_ACCESS_KEY_ID", "mode": "deny" }, { "name": "AWS_SECRET_ACCESS_KEY", "mode": "deny" },
+        { "name": "AWS_SESSION_TOKEN", "mode": "deny" }, { "name": "AZURE_CLIENT_SECRET", "mode": "deny" },
+        { "name": "GOOGLE_APPLICATION_CREDENTIALS", "mode": "deny" }, { "name": "OPENAI_API_KEY", "mode": "deny" },
+        { "name": "HF_TOKEN", "mode": "deny" }, { "name": "VAULT_TOKEN", "mode": "deny" }
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "codeload.github.com", "objects.githubusercontent.com",
+        "pypi.org", "files.pythonhosted.org", "repo.packagist.org",
+        "proxy.golang.org", "sum.golang.org", "index.crates.io", "static.crates.io"
+      ]
+    }
+  },
+  "env": {
+    "DISABLE_TELEMETRY": "1"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous.sh" }]
+      },
+      {
+        "matcher": "Read|Grep|Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-files.sh" }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format.sh" }]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [{ "type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-context.sh" }]
+      }
+    ]
+  }
+}

@@ -1,0 +1,30 @@
+version: 2
+# Security updates arrive as PRs (enable "Dependabot security updates" in repo settings too).
+# cooldown: wait a few days before adopting a brand-new release, so a hijacked/malicious
+# version is usually caught and yanked before it reaches you. Security fixes skip the wait.
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Uncomment the ecosystems your project uses (Dependabot errors on a missing manifest):
+  # - package-ecosystem: npm          # also: pip, uv, composer, gomod, cargo, bundler, maven, gradle, nuget
+  #   directory: /
+  #   schedule:
+  #     interval: weekly
+  #   cooldown:
+  #     default-days: 7
+  #   open-pull-requests-limit: 10
+  #   groups:
+  #     minor-and-patch:
+  #       update-types: [minor, patch]
+  # - package-ecosystem: docker
+  #   directory: /
+  #   schedule:
+  #     interval: weekly

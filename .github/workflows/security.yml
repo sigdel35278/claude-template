@@ -1,0 +1,204 @@
+name: Security
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1" # weekly: catches newly disclosed CVEs in code that hasn't changed
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: security-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+# Free, open-source scanners that work on public and private repos alike (no GitHub Advanced
+# Security needed). Required checks: every job except "Suppression audit" (see README).
+# Hardening: images pinned by digest (tag kept for readability), run as the runner user on a
+# read-only mount, and scanner config that a PR could use to silence findings is ignored or
+# fixed here. Suppressions a PR does add are flagged by the "Suppression audit" job.
+env:
+  GITLEAKS_IMAGE: ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+  OSV_IMAGE: ghcr.io/google/osv-scanner:v2.6.0@sha256:afd838850ac1a0fcc15ff4a041dc9ba11123c3f0d2666217a5f0fcf9222b55fa
+  SEMGREP_IMAGE: semgrep/semgrep:1.178.0@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
+  ZIZMOR_IMAGE: ghcr.io/zizmorcore/zizmor:1.30.1@sha256:a2eb396d886c053073405c7a980f2139ba2248ec172243cfa3841e57196e8101
+  # Trivy's own action and tags were hijacked in March 2026 (GHSA-69fq-xp46-6x23); images pinned
+  # by digest were unaffected. This digest's Sigstore signature was verified against Aqua's
+  # release workflow before pinning; re-verify on every bump (README).
+  TRIVY_IMAGE: ghcr.io/aquasecurity/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+jobs:
+  secrets:
+    name: Secrets (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0 # full history: a secret added then deleted is still leaked
+          persist-credentials: false
+      # PRs: scan only the PR's commits. Push/merge queue/schedule: scan all history.
+      # Rules come from this workflow (default ruleset), not a repo .gitleaks.toml a PR could
+      # edit. Accepted findings go in .gitleaksignore (owner-reviewed fingerprints).
+      # A finding means ROTATE the secret; deleting it from the file is not enough.
+      - name: Scan commits for secrets
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          printf '[extend]\nuseDefault = true\n' > "$RUNNER_TEMP/gitleaks.toml"
+          range=""
+          if [ -n "$BASE" ]; then range="--log-opts=$BASE..$HEAD"; fi
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            -v "$PWD:/repo:ro" -v "$RUNNER_TEMP/gitleaks.toml:/gitleaks.toml:ro" -w /repo \
+            "$GITLEAKS_IMAGE" git --config /gitleaks.toml --redact --verbose $range .
+
+  dependencies:
+    name: Dependencies (osv-scanner)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      # Checks every lockfile (npm, pnpm, yarn, pip, poetry, composer, go, cargo, ...) against
+      # the OSV database, including gitignored ones. Only the root osv-scanner.toml
+      # (owner-reviewed; give each ignore a reason and expiry) is honoured, not nested ones.
+      - name: Scan lockfiles for known vulnerabilities
+        run: |
+          cfg="$RUNNER_TEMP/osv-scanner.toml"
+          if [ -f osv-scanner.toml ]; then cp osv-scanner.toml "$cfg"; else : > "$cfg"; fi
+          set +e
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/src:ro" -v "$cfg:/osv-scanner.toml:ro" \
+            "$OSV_IMAGE" scan source --recursive --no-ignore --config=/osv-scanner.toml /src
+          rc=$?
+          if [ "$rc" -eq 128 ]; then echo "No lockfiles found; nothing to scan."; exit 0; fi
+          exit "$rc"
+
+  code:
+    name: Code (semgrep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      # Static analysis for injection, XSS, unsafe deserialization, weak crypto, etc.
+      # Public repo or GitHub Advanced Security? Also enable CodeQL default setup (README).
+      - name: Static analysis
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/src:ro" -w /src "$SEMGREP_IMAGE" \
+            semgrep scan --config p/default --error --metrics=off --disable-version-check
+
+  workflows:
+    name: Workflows (zizmor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      # Finds CI weaknesses: script injection, excessive permissions, unpinned actions,
+      # dangerous triggers, credential persistence; with a token also impostor commits and
+      # known-vulnerable actions. Repo zizmor config is ignored; inline ignores are audited.
+      - name: Audit GitHub Actions workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mode="--offline"
+          if [ -n "${GH_TOKEN:-}" ]; then mode=""; fi # online audits when a token is available
+          docker run --rm --user "$(id -u):$(id -g)" -e GH_TOKEN -v "$PWD:/src:ro" -w /src \
+            "$ZIZMOR_IMAGE" --no-config --min-severity low $mode .
+
+  infrastructure:
+    name: Infrastructure (trivy config)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      # Misconfigurations in Dockerfiles, Terraform, Kubernetes, Helm, CloudFormation, Ansible:
+      # root containers, public buckets, open security groups, missing encryption, ...
+      # A repo trivy.yaml is ignored (it can skip files or point at untrusted check bundles);
+      # only the root .trivyignore (owner-reviewed; trivy's default) applies. Uses the checks
+      # built into the verified image (--skip-check-update), not a runtime download.
+      # Passes when there is no IaC.
+      - name: Scan infrastructure-as-code
+        run: |
+          : > "$RUNNER_TEMP/trivy.yaml"
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/src:ro" \
+            -v "$RUNNER_TEMP/trivy.yaml:/trivy.yaml:ro" -w /src "$TRIVY_IMAGE" \
+            --config /trivy.yaml --cache-dir /tmp/trivy config --skip-check-update \
+            --severity HIGH,CRITICAL --exit-code 1 .
+
+  container:
+    name: Container image (trivy image)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      # One image per workflow; job passes if DOCKERFILE doesn't exist. (Not DOCKER_CONTEXT:
+      # that name is reserved by the docker CLI and would break every docker command.)
+      DOCKERFILE: Dockerfile
+      BUILD_CONTEXT: .
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      # Builds the image and scans the result: OS-package CVEs in the base image (which
+      # osv-scanner can't see) and secrets baked into layers. Fixable HIGH/CRITICAL only.
+      # Repo trivy.yaml / trivy-secret.yaml are ignored (they could disable rules).
+      # Builds untrusted PR code: run only on GitHub-hosted (ephemeral) runners.
+      - name: Build and scan image
+        run: |
+          if [ ! -f "$DOCKERFILE" ]; then echo "No $DOCKERFILE; nothing to scan."; exit 0; fi
+          docker build --pull -f "$DOCKERFILE" -t "security-scan:$GITHUB_SHA" "$BUILD_CONTEXT"
+          docker save -o "$RUNNER_TEMP/image.tar" "security-scan:$GITHUB_SHA"
+          : > "$RUNNER_TEMP/trivy.yaml"
+          printf '{}\n' > "$RUNNER_TEMP/trivy-secret.yaml" # built-in secret rules only
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+            -v "$RUNNER_TEMP/image.tar:/image.tar:ro" -v "$RUNNER_TEMP/trivy.yaml:/trivy.yaml:ro" \
+            -v "$RUNNER_TEMP/trivy-secret.yaml:/trivy-secret.yaml:ro" -v "$PWD:/src:ro" -w /src "$TRIVY_IMAGE" \
+            --config /trivy.yaml --cache-dir /tmp/trivy image --input /image.tar \
+            --scanners vuln,secret --secret-config /trivy-secret.yaml --ignore-unfixed \
+            --severity HIGH,CRITICAL --exit-code 1
+
+  suppressions:
+    name: Suppression audit
+    # Fails when a PR adds a way to silence a scanner, so a code owner must look at it.
+    # Not a required check: an owner may accept a justified suppression and merge.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Flag new scanner suppressions
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          files=$(git diff --name-only --diff-filter=AMR "$BASE" "$HEAD" \
+            | grep -E '(^|/)(\.gitleaks\.toml|\.gitleaksignore|osv-scanner\.toml|\.semgrepignore|\.?zizmor\.ya?ml|\.trivyignore(\.yaml)?|trivy(-secret)?\.ya?ml)$' || true)
+          inline=$(git diff -U0 "$BASE" "$HEAD" -- . ':(exclude).github/workflows/security.yml' \
+            | grep -E '^\+[^+]' | grep -Ei 'gitleaks:allow|nosemgrep|nosec|zizmor: *ignore|trivy: *ignore' || true)
+          if [ -n "$files$inline" ]; then
+            echo "::error::This PR adds scanner suppressions; a code owner must review and accept them."
+            printf '%s\n' "$files" "$inline" | sed '/^$/d'
+            exit 1
+          fi
+          echo "No new suppressions."

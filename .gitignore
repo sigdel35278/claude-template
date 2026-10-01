@@ -1,0 +1,19 @@
+CLAUDE.local.md
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+.env
+.env.*
+!.env.example
+.envrc
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+.DS_Store
+# Terraform: state holds secrets in plain text; keep it in a remote encrypted backend
+*.tfstate
+*.tfstate.*
+.terraform/
+*.tfvars
+!*.tfvars.example

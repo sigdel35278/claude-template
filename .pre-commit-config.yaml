@@ -1,0 +1,8 @@
+# Blocks commits that contain secrets: for every developer, not just Claude.
+# One-time setup per clone:  pipx install pre-commit && pre-commit install
+# CI (security.yml) runs the same scanner, so a skipped hook (--no-verify) is still caught.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e # frozen: v8.30.1
+    hooks:
+      - id: gitleaks

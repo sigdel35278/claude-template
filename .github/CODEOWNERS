@@ -1,0 +1,22 @@
+# Changes to AI guardrails, CI and security config need review from a security owner.
+# 1) Replace @your-org/security-team with a real user (@name) or team.
+# 2) Enforce it: branch protection -> "Require review from Code Owners".
+/.claude/                  @your-org/security-team
+/CLAUDE.md                 @your-org/security-team
+/.mcp.json                 @your-org/security-team
+/.github/                  @your-org/security-team
+/.pre-commit-config.yaml   @your-org/security-team
+/SECURITY.md               @your-org/security-team
+/docs/security-checklist.md        @your-org/security-team
+/docs/managed-settings.example.json @your-org/security-team
+# Scanner config and suppressions, at any depth.
+**/.gitleaks.toml          @your-org/security-team
+**/.gitleaksignore         @your-org/security-team
+**/osv-scanner.toml        @your-org/security-team
+**/.semgrepignore          @your-org/security-team
+**/zizmor.yml              @your-org/security-team
+**/.zizmor.yml             @your-org/security-team
+**/.trivyignore            @your-org/security-team
+**/.trivyignore.yaml       @your-org/security-team
+**/trivy.yaml              @your-org/security-team
+**/trivy-secret.yaml       @your-org/security-team
