@@ -113,8 +113,9 @@ jobs:
         run: |
           mode="--offline"
           if [ -n "${GH_TOKEN:-}" ]; then mode=""; fi # online audits when a token is available
-          docker run --rm --user "$(id -u):$(id -g)" -e GH_TOKEN -v "$PWD:/src:ro" -w /src \
-            "$ZIZMOR_IMAGE" --no-config --min-severity low $mode .
+          # Non-root has no home dir: give online audits a writable cache (else "/.cache" fails).
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e GH_TOKEN -v "$PWD:/src:ro" -w /src \
+            "$ZIZMOR_IMAGE" --no-config --cache-dir /tmp/zizmor --min-severity low $mode .
 
   infrastructure:
     name: Infrastructure (trivy config)

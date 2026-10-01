@@ -2,6 +2,9 @@
 
 ## [Unreleased] (2026-10-01)
 
+### Fixed — first real CI run
+- `Workflows (zizmor)` failed in CI: with a token it runs online audits, whose cache defaulted to `/.cache` (the non-root container user has no home). Now `HOME=/tmp` and `--cache-dir /tmp/zizmor`. The local simulation had no token, so it only ever exercised offline mode.
+
 ### Added — hardening & policy (Phase 2)
 - **Sandbox on by default** (`settings.json`): OS-enforced; command writes limited to the project, credential dirs and secret files unreadable, secret env vars unset, network via allowlist proxy (hardened further in the review round below). `autoAllowBashIfSandboxed: false` keeps all prompts. Verified live: writes to `.claude/hooks/` and `~` refused.
 - `docs/managed-settings.example.json`: org-wide policy (bypass off, secret deny rules, sandbox required on macOS/Linux/WSL, credentials hidden), schema-validated.
